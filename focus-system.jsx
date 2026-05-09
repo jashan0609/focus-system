@@ -71,6 +71,16 @@ function fmt(s) {
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 function dayKey() { return new Date().toISOString().slice(0, 10); }
+function safeParse(raw, fallback) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+function isValidPreset(p) {
+  return p && typeof p.label === "string" && Number.isInteger(p.mins) && p.mins > 0;
+}
 
 export default function FocusSystem() {
   const [view, setView] = useState("timer");
@@ -89,11 +99,11 @@ export default function FocusSystem() {
   const [stats, setStats] = useState({ total: 0, mins: 0, bestDay: 0, streak: 0 });
   const [loaded, setLoaded] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
+  const [completionMessage, setCompletionMessage] = useState("Focus session complete");
   const [addingFocus, setAddingFocus] = useState(false);
   const [addingBreak, setAddingBreak] = useState(false);
   const [customVal, setCustomVal] = useState("");
   const [editing, setEditing] = useState(false);
-  const [alarming, setAlarming] = useState(false);
   const intervalRef = useRef(null);
   const customInputRef = useRef(null);
   const alarmRef = useRef(null);
@@ -106,20 +116,35 @@ export default function FocusSystem() {
   useEffect(() => {
     try {
       const sRes = localStorage.getItem("focus-sessions");
-      if (sRes) setSessions(JSON.parse(sRes));
+      if (sRes) {
+        const parsedSessions = safeParse(sRes, []);
+        if (Array.isArray(parsedSessions)) setSessions(parsedSessions.filter(s => s && s.date && Number.isInteger(s.dur)));
+      }
 
       const stRes = localStorage.getItem("focus-stats");
-      if (stRes) setStats(JSON.parse(stRes));
+      if (stRes) {
+        const parsedStats = safeParse(stRes, null);
+        if (parsedStats && typeof parsedStats === "object") {
+          setStats({
+            total: Number.isFinite(parsedStats.total) ? parsedStats.total : 0,
+            mins: Number.isFinite(parsedStats.mins) ? parsedStats.mins : 0,
+            bestDay: Number.isFinite(parsedStats.bestDay) ? parsedStats.bestDay : 0,
+            streak: Number.isFinite(parsedStats.streak) ? parsedStats.streak : 0,
+          });
+        }
+      }
 
       const fpRes = localStorage.getItem("focus-presets");
       if (fpRes) {
-        const d = JSON.parse(fpRes);
-        if (d.focus?.length) setFocusPresets(d.focus);
-        if (d.breaks?.length) setBreakPresets(d.breaks);
-        if (typeof d.selFocus === "number") setSelFocus(d.selFocus);
-        if (typeof d.selBreak === "number") setSelBreak(d.selBreak);
-        const sf = typeof d.selFocus === "number" ? d.selFocus : 2;
-        const fp = d.focus?.length ? d.focus : DEFAULT_FOCUS;
+        const d = safeParse(fpRes, {});
+        const parsedFocus = Array.isArray(d.focus) ? d.focus.filter(isValidPreset) : [];
+        const parsedBreaks = Array.isArray(d.breaks) ? d.breaks.filter(isValidPreset) : [];
+        if (parsedFocus.length) setFocusPresets(parsedFocus);
+        if (parsedBreaks.length) setBreakPresets(parsedBreaks);
+        if (Number.isInteger(d.selFocus)) setSelFocus(d.selFocus);
+        if (Number.isInteger(d.selBreak)) setSelBreak(d.selBreak);
+        const sf = Number.isInteger(d.selFocus) ? d.selFocus : 2;
+        const fp = parsedFocus.length ? parsedFocus : DEFAULT_FOCUS;
         if (fp[sf]) setRemaining(fp[sf].mins * 60);
       }
     } catch (e) {
@@ -145,7 +170,6 @@ export default function FocusSystem() {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       alarmRef.current = createAlarm(ctx);
-      setAlarming(true);
     } catch {}
   }, []);
 
@@ -158,12 +182,12 @@ export default function FocusSystem() {
       } catch {}
       alarmRef.current = null;
     }
-    setAlarming(false);
     setShowComplete(false);
   }, []);
 
   const completeSession = useCallback(() => {
     if (phase === "break") {
+      setCompletionMessage("Break over");
       setPhase("idle");
       setRemaining(currentFocus.mins * 60);
       setShowComplete(true);
@@ -177,14 +201,25 @@ export default function FocusSystem() {
       task: task || "Unnamed task", dur, date: dayKey(), id: Date.now(),
     };
     const newSessions = [entry, ...sessions].slice(0, 50);
-    const todayCount = newSessions.filter(s => s.date === dayKey()).length;
+    const today = dayKey();
+    const uniqueDays = [...new Set(newSessions.map(s => s.date))].sort((a, b) => b.localeCompare(a));
+    let streak = 0;
+    const cursor = new Date(`${today}T00:00:00`);
+    for (const d of uniqueDays) {
+      const expected = cursor.toISOString().slice(0, 10);
+      if (d !== expected) break;
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    const todayCount = newSessions.filter(s => s.date === today).length;
     const newStats = {
       total: stats.total + 1, mins: stats.mins + dur,
-      bestDay: Math.max(stats.bestDay, todayCount), streak: stats.streak + 1,
+      bestDay: Math.max(stats.bestDay, todayCount), streak,
     };
     setSessions(newSessions);
     setStats(newStats);
     save(newSessions, newStats);
+    setCompletionMessage("Focus session complete");
     setShowComplete(true);
     startAlarm();
     setPhase("idle");
@@ -201,7 +236,18 @@ export default function FocusSystem() {
       }, 1000);
     }
     return () => clearInterval(intervalRef.current);
-  }, [running, completeSession]);
+  }, [running, remaining, completeSession]);
+
+  useEffect(() => {
+    return () => {
+      clearInterval(intervalRef.current);
+      if (alarmRef.current) {
+        try {
+          alarmRef.current.ctx.close();
+        } catch {}
+      }
+    };
+  }, []);
 
   const toggleRun = () => { if (phase === "idle") setPhase("focus"); setRunning(r => !r); };
   const resetTimer = () => { clearInterval(intervalRef.current); setRunning(false); setPhase("idle"); setRemaining(currentFocus.mins * 60); };
@@ -221,7 +267,7 @@ export default function FocusSystem() {
   };
 
   const addCustom = (type) => {
-    const v = parseInt(customVal);
+    const v = parseInt(customVal, 10);
     if (!v || v < 1 || v > (type === "focus" ? 180 : 60)) return;
     if (type === "focus") {
       if (focusPresets.some(p => p.mins === v)) { setAddingFocus(false); setCustomVal(""); return; }
@@ -268,7 +314,7 @@ export default function FocusSystem() {
     if ((addingFocus || addingBreak) && customInputRef.current) customInputRef.current.focus();
   }, [addingFocus, addingBreak]);
 
-  const pct = 1 - remaining / totalSecs;
+  const pct = totalSecs > 0 ? 1 - remaining / totalSecs : 0;
   const dashOff = CIRC * (1 - pct);
   const todaySessions = sessions.filter(s => s.date === dayKey());
   const todayMins = todaySessions.reduce((a, s) => a + s.dur, 0);
@@ -357,11 +403,11 @@ export default function FocusSystem() {
 
       {showComplete && (
         <div style={S.alarmOverlay}>
-          <div style={S.alarmBox}>
+            <div style={S.alarmBox}>
             <div style={S.alarmPulse}>⏰</div>
             <div style={S.alarmTitle}>Time's up!</div>
-            <div style={S.alarmSub}>{phase === "idle" ? "Focus session complete" : "Break over"}</div>
-            <button onClick={stopAlarm} style={S.stopBtn}>
+            <div style={S.alarmSub}>{completionMessage}</div>
+            <button onClick={stopAlarm} style={S.stopBtn} aria-label="Stop alarm">
               ■&nbsp;&nbsp;Stop alarm
             </button>
           </div>
@@ -414,7 +460,7 @@ export default function FocusSystem() {
           <div style={{ textAlign: "center", marginBottom: 20 }}>
             <input value={task} onChange={e => setTask(e.target.value)}
               placeholder="What's your one task this session?"
-              style={S.taskInput} disabled={running} />
+              style={S.taskInput} disabled={running} aria-label="Focus task" />
           </div>
 
           <div style={S.btnRow}>
@@ -570,7 +616,7 @@ const S = {
     color: "#555", cursor: "pointer", borderBottom: "2px solid transparent",
     marginBottom: -1, transition: "all .15s", fontFamily: "'Outfit', sans-serif", fontWeight: 400,
   },
-  navActive: { color: "#e0e0e0", borderBottomColor: "#4ECDC4", fontWeight: 500 },
+  navActive: { color: "#e0e0e0", borderBottom: "2px solid #4ECDC4", fontWeight: 500 },
   alarmOverlay: {
     position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
     background: "rgba(0,0,0,.85)", backdropFilter: "blur(8px)",
@@ -606,7 +652,7 @@ const S = {
   pickerLabel: { fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 500, marginBottom: 6, fontFamily: "'JetBrains Mono', monospace" },
   durRow: { display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" },
   durBtn: {
-    background: "none", border: "1px solid rgba(255,255,255,.08)", borderRadius: 8,
+    background: "none", borderStyle: "solid", borderWidth: 1, borderColor: "rgba(255,255,255,.08)", borderRadius: 8,
     padding: "7px 16px", fontSize: 12, color: "#555", cursor: "pointer",
     fontFamily: "'JetBrains Mono', monospace", transition: "all .15s",
   },
@@ -672,7 +718,7 @@ const S = {
   },
   wordCount: { fontSize: 11, color: "#444", fontFamily: "'JetBrains Mono', monospace" },
   tinyBtn: {
-    background: "none", border: "1px solid rgba(255,255,255,.06)", borderRadius: 6,
+    background: "none", borderStyle: "solid", borderWidth: 1, borderColor: "rgba(255,255,255,.06)", borderRadius: 6,
     padding: "4px 12px", fontSize: 11, color: "#555", cursor: "pointer",
     fontFamily: "'Outfit', sans-serif", transition: "all .15s",
   },
@@ -712,8 +758,9 @@ const S = {
 };
 
 // Simplified style injection for standard browsers
-if (typeof document !== 'undefined') {
+if (typeof document !== "undefined" && !document.getElementById("focus-system-styles")) {
     const styleSheet = document.createElement("style");
+    styleSheet.id = "focus-system-styles";
     styleSheet.textContent = `
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
