@@ -104,6 +104,9 @@ export default function FocusSystem() {
   const [addingBreak, setAddingBreak] = useState(false);
   const [customVal, setCustomVal] = useState("");
   const [editing, setEditing] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(
+    typeof window === "undefined" ? 1024 : window.innerWidth
+  );
   const intervalRef = useRef(null);
   const customInputRef = useRef(null);
   const alarmRef = useRef(null);
@@ -249,6 +252,12 @@ export default function FocusSystem() {
     };
   }, []);
 
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const toggleRun = () => { if (phase === "idle") setPhase("focus"); setRunning(r => !r); };
   const resetTimer = () => { clearInterval(intervalRef.current); setRunning(false); setPhase("idle"); setRemaining(currentFocus.mins * 60); };
 
@@ -321,6 +330,8 @@ export default function FocusSystem() {
   const wordCount = dump.trim() ? dump.trim().split(/\s+/).length : 0;
   const ringColor = phase === "break" ? "#E8A838" : phase === "focus" || running ? "#4ECDC4" : "#555";
   const phaseLabel = phase === "break" ? "Break" : running ? "Focusing" : "Ready";
+  const isPhone = viewportWidth <= 640;
+  const timerSize = viewportWidth <= 380 ? 220 : viewportWidth <= 640 ? 236 : 260;
 
   const goToTimer = () => { if (intention) setTask(intention); setView("timer"); };
 
@@ -383,7 +394,7 @@ export default function FocusSystem() {
     <div style={S.root}>
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      <div style={S.header}>
+      <div style={{ ...S.header, ...(isPhone ? S.headerMobile : {}) }}>
         <div style={S.logo}><span style={S.logoIcon}>◎</span><span style={S.logoText}>Focus</span></div>
         <div style={S.headerStats}>
           <span style={S.hStat}>{todaySessions.length} sessions</span>
@@ -392,7 +403,7 @@ export default function FocusSystem() {
         </div>
       </div>
 
-      <div style={S.nav}>
+      <div style={{ ...S.nav, ...(isPhone ? S.navMobile : {}) }}>
         {["timer", "prep", "techniques", "history"].map(v => (
           <button key={v} onClick={() => setView(v)}
             style={{ ...S.navBtn, ...(view === v ? S.navActive : {}) }}>
@@ -402,8 +413,8 @@ export default function FocusSystem() {
       </div>
 
       {showComplete && (
-        <div style={S.alarmOverlay}>
-            <div style={S.alarmBox}>
+          <div style={S.alarmOverlay}>
+            <div style={{ ...S.alarmBox, ...(isPhone ? S.alarmBoxMobile : {}) }}>
             <div style={S.alarmPulse}>⏰</div>
             <div style={S.alarmTitle}>Time's up!</div>
             <div style={S.alarmSub}>{completionMessage}</div>
@@ -417,7 +428,7 @@ export default function FocusSystem() {
       {/* ═══ TIMER ═══ */}
       {view === "timer" && (
         <div style={S.timerView}>
-          <div style={S.statsRow}>
+          <div style={{ ...S.statsRow, ...(isPhone ? S.statsRowMobile : {}) }}>
             {[
               { label: "Total sessions", val: stats.total },
               { label: "Focus hours", val: (stats.mins / 60).toFixed(1) },
@@ -434,7 +445,7 @@ export default function FocusSystem() {
           </div>
 
           <div style={S.timerCenter}>
-            <svg width="260" height="260" viewBox="0 0 260 260" style={{ transform: "rotate(-90deg)" }}>
+            <svg width={timerSize} height={timerSize} viewBox="0 0 260 260" style={{ transform: "rotate(-90deg)" }}>
               <circle cx="130" cy="130" r="120" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="5" />
               <circle cx="130" cy="130" r="120" fill="none" stroke={ringColor}
                 strokeWidth="5" strokeLinecap="round"
@@ -442,7 +453,7 @@ export default function FocusSystem() {
                 style={{ transition: "stroke-dashoffset 0.9s linear, stroke 0.4s" }} />
             </svg>
             <div style={S.timerOverlay}>
-              <div style={S.timerNum}>{fmt(remaining)}</div>
+              <div style={{ ...S.timerNum, ...(isPhone ? S.timerNumMobile : {}) }}>{fmt(remaining)}</div>
               <div style={S.timerSub}>{phase === "break" ? "break" : "focus"}</div>
             </div>
           </div>
@@ -463,7 +474,7 @@ export default function FocusSystem() {
               style={S.taskInput} disabled={running} aria-label="Focus task" />
           </div>
 
-          <div style={S.btnRow}>
+          <div style={{ ...S.btnRow, ...(isPhone ? S.btnRowMobile : {}) }}>
             <button onClick={toggleRun} style={S.primaryBtn}>
               {running ? "⏸  Pause" : "▶  Start session"}
             </button>
@@ -520,7 +531,7 @@ export default function FocusSystem() {
       {view === "techniques" && (
         <div style={S.techView}>
           <div style={S.techIntro}>The 6 most research-backed focus techniques, scored for your profile.</div>
-          <div style={S.techGrid}>
+          <div style={{ ...S.techGrid, ...(isPhone ? S.techGridMobile : {}) }}>
             {TECHNIQUES.map((t, i) => (
               <div key={i} style={S.techCard}>
                 <div style={S.techTop}>
@@ -546,7 +557,7 @@ export default function FocusSystem() {
             {sessions.length > 0 && <button onClick={clearSessions} style={S.tinyBtn}>Clear all</button>}
           </div>
 
-          <div style={S.statsRow}>
+          <div style={{ ...S.statsRow, ...(isPhone ? S.statsRowMobile : {}) }}>
             {[
               { label: "All-time sessions", val: stats.total },
               { label: "Total focus mins", val: stats.mins },
@@ -561,7 +572,7 @@ export default function FocusSystem() {
             <div style={S.emptyState}>No sessions today — start your first one.</div>
           ) : (
             todaySessions.map((s, i) => (
-              <div key={s.id || i} style={S.logRow}>
+              <div key={s.id || i} style={{ ...S.logRow, ...(isPhone ? S.logRowMobile : {}) }}>
                 <span style={S.logTime}>{s.time}</span><span style={S.logTask}>{s.task}</span>
                 <span style={S.logDur}>{s.dur}m</span><span style={S.logCheck}>✓</span>
               </div>
@@ -572,7 +583,7 @@ export default function FocusSystem() {
             <>
               <div style={{ ...S.secTitle, fontSize: 12, marginBottom: 8, marginTop: 20, color: "#666" }}>Previous</div>
               {sessions.filter(s => s.date !== dayKey()).map((s, i) => (
-                <div key={s.id || i} style={S.logRow}>
+                <div key={s.id || i} style={{ ...S.logRow, ...(isPhone ? S.logRowMobile : {}) }}>
                   <span style={{ ...S.logTime, minWidth: 80 }}>{s.date}</span>
                   <span style={S.logTime}>{s.time}</span><span style={S.logTask}>{s.task}</span>
                   <span style={S.logDur}>{s.dur}m</span><span style={S.logCheck}>✓</span>
@@ -583,7 +594,7 @@ export default function FocusSystem() {
         </div>
       )}
 
-      <div style={S.footer}>
+      <div style={{ ...S.footer, ...(isPhone ? S.footerMobile : {}) }}>
         <span style={{ color: "#555" }}>Your loop:</span>{" "}
         <span style={{ color: "#4ECDC4" }}>Dump</span><span style={{ color: "#444" }}> → </span>
         <span style={{ color: "#4ECDC4" }}>Name task</span><span style={{ color: "#444" }}> → </span>
@@ -599,11 +610,12 @@ export default function FocusSystem() {
 const S = {
   root: {
     minHeight: "100vh", background: "linear-gradient(170deg, #0D0D0F 0%, #131318 40%, #0F1014 100%)",
-    color: "#e0e0e0", fontFamily: "'Outfit', sans-serif", padding: "0 24px 40px", maxWidth: 620, margin: "0 auto",
+    color: "#e0e0e0", fontFamily: "'Outfit', sans-serif", padding: "0 14px 40px", width: "100%", maxWidth: "100%", margin: 0,
   },
   loadWrap: { display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" },
   loadPulse: { fontSize: 40, color: "#4ECDC4" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "24px 0 20px" },
+  headerMobile: { flexDirection: "column", alignItems: "flex-start", gap: 8, padding: "18px 0 14px" },
   logo: { display: "flex", alignItems: "center", gap: 10 },
   logoIcon: { fontSize: 22, color: "#4ECDC4" },
   logoText: { fontSize: 20, fontWeight: 500, letterSpacing: "-0.02em" },
@@ -611,10 +623,12 @@ const S = {
   hStat: { fontSize: 12, color: "#666", fontFamily: "'JetBrains Mono', monospace" },
   hDot: { color: "#333" },
   nav: { display: "flex", gap: 4, marginBottom: 28, borderBottom: "1px solid rgba(255,255,255,.06)", paddingBottom: 0 },
+  navMobile: { overflowX: "auto", WebkitOverflowScrolling: "touch", gap: 2, marginBottom: 18 },
   navBtn: {
-    background: "none", border: "none", padding: "10px 16px", fontSize: 13,
+    background: "none", border: "none", padding: "12px 14px", fontSize: 13,
     color: "#555", cursor: "pointer", borderBottom: "2px solid transparent",
     marginBottom: -1, transition: "all .15s", fontFamily: "'Outfit', sans-serif", fontWeight: 400,
+    minHeight: 44, whiteSpace: "nowrap",
   },
   navActive: { color: "#e0e0e0", borderBottom: "2px solid #4ECDC4", fontWeight: 500 },
   alarmOverlay: {
@@ -627,6 +641,7 @@ const S = {
     textAlign: "center", padding: "40px 48px", borderRadius: 20,
     background: "rgba(232,75,74,.08)", border: "1px solid rgba(232,75,74,.25)",
   },
+  alarmBoxMobile: { width: "min(92vw, 380px)", padding: "28px 20px" },
   alarmPulse: { fontSize: 56, marginBottom: 16 },
   alarmTitle: { fontSize: 24, fontWeight: 500, color: "#eee", marginBottom: 6 },
   alarmSub: { fontSize: 14, color: "#888", marginBottom: 24 },
@@ -638,6 +653,7 @@ const S = {
   },
   timerView: { },
   statsRow: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 20 },
+  statsRowMobile: { gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 10 },
   statCard: { background: "rgba(255,255,255,.03)", borderRadius: 10, padding: "12px 14px", border: "1px solid rgba(255,255,255,.04)" },
   statLabel: { fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4, fontWeight: 500 },
   statVal: { fontSize: 22, fontWeight: 500, fontFamily: "'JetBrains Mono', monospace", color: "#ccc" },
@@ -645,6 +661,7 @@ const S = {
   timerCenter: { position: "relative", display: "flex", alignItems: "center", justifyContent: "center", margin: "16px 0 20px" },
   timerOverlay: { position: "absolute", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" },
   timerNum: { fontSize: 48, fontWeight: 400, fontFamily: "'JetBrains Mono', monospace", color: "#eee", letterSpacing: ".02em" },
+  timerNumMobile: { fontSize: 42 },
   timerSub: { fontSize: 12, color: "#555", textTransform: "uppercase", letterSpacing: ".1em", marginTop: 2 },
 
   // Preset pickers
@@ -653,14 +670,15 @@ const S = {
   durRow: { display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" },
   durBtn: {
     background: "none", borderStyle: "solid", borderWidth: 1, borderColor: "rgba(255,255,255,.08)", borderRadius: 8,
-    padding: "7px 16px", fontSize: 12, color: "#555", cursor: "pointer",
+    padding: "10px 14px", fontSize: 12, color: "#555", cursor: "pointer",
     fontFamily: "'JetBrains Mono', monospace", transition: "all .15s",
+    minHeight: 40,
   },
   durActiveTeal: { borderColor: "#4ECDC4", color: "#4ECDC4" },
   durActiveAmber: { borderColor: "#E8A838", color: "#E8A838" },
   addBtn: {
     background: "none", border: "1px dashed rgba(255,255,255,.12)", borderRadius: 8,
-    width: 34, height: 34, fontSize: 16, color: "#444", cursor: "pointer",
+    width: 40, height: 40, fontSize: 16, color: "#444", cursor: "pointer",
     display: "flex", alignItems: "center", justifyContent: "center", transition: "all .2s", padding: 0,
   },
   removeBtn: {
@@ -693,15 +711,16 @@ const S = {
     textAlign: "center", outline: "none", transition: "border .2s",
   },
   btnRow: { display: "flex", gap: 10, justifyContent: "center" },
+  btnRowMobile: { flexDirection: "column" },
   primaryBtn: {
     background: "rgba(78,205,196,.12)", border: "1px solid rgba(78,205,196,.25)",
     borderRadius: 10, padding: "12px 28px", fontSize: 14, color: "#4ECDC4",
-    cursor: "pointer", fontFamily: "'Outfit', sans-serif", fontWeight: 500, transition: "all .15s",
+    cursor: "pointer", fontFamily: "'Outfit', sans-serif", fontWeight: 500, transition: "all .15s", minHeight: 46,
   },
   secBtn: {
     background: "none", border: "1px solid rgba(255,255,255,.08)",
     borderRadius: 10, padding: "12px 20px", fontSize: 14, color: "#666",
-    cursor: "pointer", fontFamily: "'Outfit', sans-serif", transition: "all .15s",
+    cursor: "pointer", fontFamily: "'Outfit', sans-serif", transition: "all .15s", minHeight: 46,
   },
   prepView: { },
   section: { marginBottom: 28 },
@@ -737,6 +756,7 @@ const S = {
   techView: { },
   techIntro: { fontSize: 13, color: "#555", marginBottom: 16 },
   techGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
+  techGridMobile: { gridTemplateColumns: "1fr" },
   techCard: { background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.05)", borderRadius: 12, padding: "16px 18px" },
   techTop: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   techIcon: { fontSize: 18, color: "#4ECDC4" },
@@ -747,6 +767,7 @@ const S = {
   histView: { },
   emptyState: { textAlign: "center", padding: 40, color: "#444", fontSize: 14 },
   logRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,.04)" },
+  logRowMobile: { flexWrap: "wrap", gap: 6 },
   logTime: { fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: "#555", minWidth: 44 },
   logTask: { fontSize: 13, flex: 1, color: "#aaa" },
   logDur: { fontSize: 12, color: "#555", fontFamily: "'JetBrains Mono', monospace" },
@@ -755,6 +776,7 @@ const S = {
     marginTop: 36, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.04)",
     fontSize: 12, textAlign: "center", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.8,
   },
+  footerMobile: { textAlign: "left", fontSize: 11, lineHeight: 1.7 },
 };
 
 // Simplified style injection for standard browsers
@@ -765,6 +787,13 @@ if (typeof document !== "undefined" && !document.getElementById("focus-system-st
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
     @keyframes alarmPulse { from { transform: scale(1); } to { transform: scale(1.15); } }
+    html, body, #root {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      min-height: 100%;
+      background: #0D0D0F;
+    }
     input:focus, textarea:focus { border-color: rgba(78,205,196,.35) !important; }
     button:hover { opacity: .85; }
     ::placeholder { color: #444; }
