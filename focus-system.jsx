@@ -102,40 +102,43 @@ export default function FocusSystem() {
   const currentBreak = breakPresets[selBreak] || breakPresets[0];
   const totalSecs = phase === "break" ? currentBreak.mins * 60 : currentFocus.mins * 60;
 
+  // FIXED: Replaced window.storage with standard localStorage
   useEffect(() => {
-    (async () => {
-      try {
-        const sRes = await window.storage.get("focus-sessions");
-        if (sRes) setSessions(JSON.parse(sRes.value));
-      } catch {}
-      try {
-        const stRes = await window.storage.get("focus-stats");
-        if (stRes) setStats(JSON.parse(stRes.value));
-      } catch {}
-      try {
-        const fpRes = await window.storage.get("focus-presets");
-        if (fpRes) {
-          const d = JSON.parse(fpRes.value);
-          if (d.focus?.length) setFocusPresets(d.focus);
-          if (d.breaks?.length) setBreakPresets(d.breaks);
-          if (typeof d.selFocus === "number") setSelFocus(d.selFocus);
-          if (typeof d.selBreak === "number") setSelBreak(d.selBreak);
-          const sf = typeof d.selFocus === "number" ? d.selFocus : 2;
-          const fp = d.focus?.length ? d.focus : DEFAULT_FOCUS;
-          if (fp[sf]) setRemaining(fp[sf].mins * 60);
-        }
-      } catch {}
-      setLoaded(true);
-    })();
+    try {
+      const sRes = localStorage.getItem("focus-sessions");
+      if (sRes) setSessions(JSON.parse(sRes));
+
+      const stRes = localStorage.getItem("focus-stats");
+      if (stRes) setStats(JSON.parse(stRes));
+
+      const fpRes = localStorage.getItem("focus-presets");
+      if (fpRes) {
+        const d = JSON.parse(fpRes);
+        if (d.focus?.length) setFocusPresets(d.focus);
+        if (d.breaks?.length) setBreakPresets(d.breaks);
+        if (typeof d.selFocus === "number") setSelFocus(d.selFocus);
+        if (typeof d.selBreak === "number") setSelBreak(d.selBreak);
+        const sf = typeof d.selFocus === "number" ? d.selFocus : 2;
+        const fp = d.focus?.length ? d.focus : DEFAULT_FOCUS;
+        if (fp[sf]) setRemaining(fp[sf].mins * 60);
+      }
+    } catch (e) {
+        console.error("Failed to load state", e);
+    }
+    setLoaded(true);
   }, []);
 
-  const savePresets = useCallback(async (fp, bp, sf, sb) => {
-    try { await window.storage.set("focus-presets", JSON.stringify({ focus: fp, breaks: bp, selFocus: sf, selBreak: sb })); } catch {}
+  const savePresets = useCallback((fp, bp, sf, sb) => {
+    try { 
+        localStorage.setItem("focus-presets", JSON.stringify({ focus: fp, breaks: bp, selFocus: sf, selBreak: sb })); 
+    } catch {}
   }, []);
 
-  const save = useCallback(async (newSessions, newStats) => {
-    try { await window.storage.set("focus-sessions", JSON.stringify(newSessions)); } catch {}
-    try { await window.storage.set("focus-stats", JSON.stringify(newStats)); } catch {}
+  const save = useCallback((newSessions, newStats) => {
+    try { 
+        localStorage.setItem("focus-sessions", JSON.stringify(newSessions));
+        localStorage.setItem("focus-stats", JSON.stringify(newStats));
+    } catch {}
   }, []);
 
   const startAlarm = useCallback(() => {
@@ -275,10 +278,12 @@ export default function FocusSystem() {
 
   const goToTimer = () => { if (intention) setTask(intention); setView("timer"); };
 
-  const clearSessions = async () => {
+  const clearSessions = () => {
     setSessions([]); setStats({ total: 0, mins: 0, bestDay: 0, streak: 0 });
-    try { await window.storage.set("focus-sessions", "[]"); } catch {}
-    try { await window.storage.set("focus-stats", JSON.stringify({ total: 0, mins: 0, bestDay: 0, streak: 0 })); } catch {}
+    try { 
+        localStorage.removeItem("focus-sessions");
+        localStorage.removeItem("focus-stats");
+    } catch {}
   };
 
   if (!loaded) return <div style={S.loadWrap}><div style={S.loadPulse}>◎</div></div>;
@@ -551,7 +556,7 @@ const S = {
     color: "#e0e0e0", fontFamily: "'Outfit', sans-serif", padding: "0 24px 40px", maxWidth: 620, margin: "0 auto",
   },
   loadWrap: { display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" },
-  loadPulse: { fontSize: 40, color: "#4ECDC4", animation: "pulse 1.2s infinite" },
+  loadPulse: { fontSize: 40, color: "#4ECDC4" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "24px 0 20px" },
   logo: { display: "flex", alignItems: "center", gap: 10 },
   logoIcon: { fontSize: 22, color: "#4ECDC4" },
@@ -570,13 +575,13 @@ const S = {
     position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
     background: "rgba(0,0,0,.85)", backdropFilter: "blur(8px)",
     display: "flex", alignItems: "center", justifyContent: "center",
-    zIndex: 200, animation: "fadeIn .2s ease-out",
+    zIndex: 200, 
   },
   alarmBox: {
     textAlign: "center", padding: "40px 48px", borderRadius: 20,
     background: "rgba(232,75,74,.08)", border: "1px solid rgba(232,75,74,.25)",
   },
-  alarmPulse: { fontSize: 56, marginBottom: 16, animation: "alarmPulse .6s ease-in-out infinite alternate" },
+  alarmPulse: { fontSize: 56, marginBottom: 16 },
   alarmTitle: { fontSize: 24, fontWeight: 500, color: "#eee", marginBottom: 6 },
   alarmSub: { fontSize: 14, color: "#888", marginBottom: 24 },
   stopBtn: {
@@ -585,7 +590,7 @@ const S = {
     cursor: "pointer", fontFamily: "'Outfit', sans-serif", fontWeight: 500,
     transition: "all .15s", letterSpacing: ".01em",
   },
-  timerView: { animation: "fadeIn .35s ease-out" },
+  timerView: { },
   statsRow: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 20 },
   statCard: { background: "rgba(255,255,255,.03)", borderRadius: 10, padding: "12px 14px", border: "1px solid rgba(255,255,255,.04)" },
   statLabel: { fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4, fontWeight: 500 },
@@ -652,7 +657,7 @@ const S = {
     borderRadius: 10, padding: "12px 20px", fontSize: 14, color: "#666",
     cursor: "pointer", fontFamily: "'Outfit', sans-serif", transition: "all .15s",
   },
-  prepView: { animation: "fadeIn .35s ease-out" },
+  prepView: { },
   section: { marginBottom: 28 },
   secHead: { display: "flex", gap: 14, alignItems: "flex-start", marginBottom: 12 },
   secNum: { fontSize: 11, color: "#4ECDC4", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, marginTop: 2, minWidth: 20 },
@@ -683,7 +688,7 @@ const S = {
     color: "transparent", cursor: "pointer", transition: "all .2s", flexShrink: 0,
   },
   checkboxChecked: { background: "rgba(78,205,196,.15)", borderColor: "rgba(78,205,196,.4)", color: "#4ECDC4" },
-  techView: { animation: "fadeIn .35s ease-out" },
+  techView: { },
   techIntro: { fontSize: 13, color: "#555", marginBottom: 16 },
   techGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
   techCard: { background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.05)", borderRadius: 12, padding: "16px 18px" },
@@ -693,7 +698,7 @@ const S = {
   techName: { fontSize: 14, fontWeight: 500, color: "#ccc", marginBottom: 6 },
   techDesc: { fontSize: 12, color: "#666", lineHeight: 1.55, marginBottom: 8 },
   techYou: { fontSize: 11, color: "#555", borderLeft: "2px solid rgba(78,205,196,.3)", paddingLeft: 10, fontStyle: "italic", lineHeight: 1.5 },
-  histView: { animation: "fadeIn .35s ease-out" },
+  histView: { },
   emptyState: { textAlign: "center", padding: 40, color: "#444", fontSize: 14 },
   logRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,.04)" },
   logTime: { fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: "#555", minWidth: 44 },
@@ -706,15 +711,18 @@ const S = {
   },
 };
 
-const styleSheet = document.createElement("style");
-styleSheet.textContent = `
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
-  @keyframes alarmPulse { from { transform: scale(1); } to { transform: scale(1.15); } }
-  input:focus, textarea:focus { border-color: rgba(78,205,196,.35) !important; }
-  button:hover { opacity: .85; }
-  ::placeholder { color: #444; }
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 4px; }
-`;
-document.head.appendChild(styleSheet);
+// Simplified style injection for standard browsers
+if (typeof document !== 'undefined') {
+    const styleSheet = document.createElement("style");
+    styleSheet.textContent = `
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+    @keyframes alarmPulse { from { transform: scale(1); } to { transform: scale(1.15); } }
+    input:focus, textarea:focus { border-color: rgba(78,205,196,.35) !important; }
+    button:hover { opacity: .85; }
+    ::placeholder { color: #444; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 4px; }
+    `;
+    document.head.appendChild(styleSheet);
+}
